@@ -1,0 +1,8 @@
+export type ChatMessage = { id: string; role: "user" | "assistant"; text: string; at: number };
+export type PrivateInsight = { summary: string; strengths: string[]; questions: string[]; nextStep: string; evidence: string; at: number };
+export type Person = { id: string; cohort: string; alias: string; createdAt: number; lastSeen: number; invitedBy?: string; generation: number; variant: "result" | "case"; sessionId?: string; roomIds: string[]; topic: string; keywords: string[]; draft: string; chat: ChatMessage[]; insight?: PrivateInsight };
+export type SharedCase = { id: string; cohort: string; owner: string; alias: string; topic: string; text: string; keywords: string[]; at: number; parentId?: string };
+export type RoomMessage = { id: string; roomId: string; owner: string; alias: string; text: string; at: number };
+export type Invite = { id: string; cohort: string; owner: string; roomId?: string; at: number; expiresAt: number; generation: number; variant: "result" | "case" };
+export type CaseCard = Omit<SharedCase, "owner" | "cohort"> & { own: boolean; joined: boolean; score: number; online: boolean; participants: number };
+export type PeerState = { person: Omit<Person, "id" | "cohort" | "invitedBy" | "sessionId">; cases: CaseCard[]; room?: { case: CaseCard; messages: Omit<RoomMessage, "owner">[] }; stats: { participants: number; online: number; sharedCases: number; invitedParticipants: number; secondGeneration: number } };
