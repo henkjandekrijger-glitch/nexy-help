@@ -1,3 +1,4 @@
 {
-  "crons": [{ "path": "/api/telegram/retry", "schedule": "*/5 * * * *" }]
+  "crons": [{ "path": "/api/telegram/retry", "schedule": "*/5 * * * *" }, { "path": "/api/learn/review", "schedule": "17 5 * * *" }]
 }
+
