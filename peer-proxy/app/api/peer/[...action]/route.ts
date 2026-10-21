@@ -132,6 +132,8 @@ async function handle(request: NextRequest, action: string) {
   if (action === "wait") {
     const c = await roomFor(p, body.roomId);
     const eventId = id();
+    const prior = (await readRecord<Directory>(directoryPath(p.cohort)))?.value.activity?.[c.id]?.waiting;
+    if (prior?.owner === p.id && prior.at > Date.now() - 600000) return json(await loadState(p, c.id));
     const d = await changeRecord<Directory>(directoryPath(p.cohort), d => {
       d ??= emptyDirectory(); d.activity ??= {};
       const existing = d.activity[c.id];
