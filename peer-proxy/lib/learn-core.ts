@@ -5,6 +5,7 @@ export type Arm = { visits: number; started: number; first_message: number; firs
 export type Experiment = { version: string; arms: Record<"a" | "b", Arm>; updatedAt: number };
 export const emptyArm = (): Arm => ({ visits: 0, started: 0, first_message: 0, first_peer_reply: 0, returned: 0, helpful: 0, failed: 0 });
 export const emptyExperiment = (): Experiment => ({ version: UX_VERSION, arms: { a: emptyArm(), b: emptyArm() }, updatedAt: Date.now() });
+export function pickVariant(winner: "a" | "b" | null, seed: number): "a" | "b" { return winner ? seed % 10 < 8 ? winner : winner === "a" ? "b" : "a" : seed % 2 ? "a" : "b"; }
 const words = new Set(["landing", "chat", "peers", "mirror", "room", "share", "invite", "recovery", "privacy", "telegram", "find", "none", "control", "composer", "restore", "begin", "preview", "message", "start", "join", "leave", "read", "wait", "reflect", "feedback", "recover", "state", "telegram-connect", "telegram-disconnect", "match", "visible", "hidden", "small", "medium", "large", "empty", "short", "long", "a", "b", "pointer", "keyboard", "timer", "pagehide", "navigation", "enabled", "disabled", "chat_success", "room_success", "other", "open", "close"]);
 const textKeys = new Set(["view", "from", "to", "action", "field", "size", "bucket", "variant", "reason", "state"]);
 const numberKeys = new Set(["ms", "count", "position", "depth", "status", "score"]);

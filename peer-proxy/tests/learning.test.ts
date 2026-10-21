@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanEvents, decision, emptyExperiment } from "../lib/learn-core.ts";
+import { cleanEvents, decision, pickVariant, emptyExperiment } from "../lib/learn-core.ts";
+test("adaptive allocation preserves 20 percent exploration for either winning arm", () => {
+  for (const winner of ["a", "b"] as const) assert.equal(Array.from({ length: 100 }, (_, seed) => pickVariant(winner, seed)).filter(v => v === winner).length, 80);
+  assert.equal(Array.from({ length: 100 }, (_, seed) => pickVariant(null, seed)).filter(v => v === "a").length, 50);
+});
 test("analytics rejects private text, arbitrary URLs, and content disguised as action labels", () => {
   const result = cleanEvents([{ name: "click", at: Date.now(), props: { action: "my secret@example.com", text: "private words", url: "https://example.com/?secret=x", view: "chat", status: 200 } }]);
   assert.deepEqual(result[0].props, { view: "chat", status: 200 });

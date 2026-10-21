@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { del, list } from "@vercel/blob";
 import { changeRecord, readRecord, writeRecord } from "./peer-store";
 import { signingKey, validId } from "./peer-core";
-import { decision, emptyExperiment, UX_VERSION, type Experiment, type LearnEvent, type Arm } from "./learn-core";
+import { decision, pickVariant, emptyExperiment, UX_VERSION, type Experiment, type LearnEvent, type Arm } from "./learn-core";
 import type { Person } from "./peer-types";
 
 export const actorKey = (uid: string) => createHmac("sha256", signingKey()).update(`learning:${uid}`).digest("hex").slice(0, 32);
@@ -31,7 +31,7 @@ export async function proxyHint(cohort: string): Promise<"default" | "reflect-ne
 export async function experiment(cohort = "pilot") { return (await readRecord<Experiment>(path(cohort)))?.value ?? emptyExperiment(); }
 export async function chooseVariant(seed: number): Promise<"a" | "b"> {
   const d = decision(await experiment());
-  return d.winner && seed % 10 < 8 ? d.winner : seed % 2 ? "a" : "b";
+  return pickVariant(d.winner, seed);
 }
 export async function milestone(person: Person, name: keyof Arm, context?: { visit?: string; room?: string; source?: string }) {
   if (!person.learnVariant || person.learnVersion !== UX_VERSION || person.learningEnabled === false) return;

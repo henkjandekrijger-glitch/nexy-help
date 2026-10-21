@@ -11,7 +11,7 @@ export function learnView(next: string) { view = next; learn("view", { to: next 
 export function setLearning(enabled: boolean) { disabled = !enabled; if (enabled && !token) void fetch("/api/learn", { cache: "no-store" }).then(r => r.json()).then(d => { token = d.token || ""; }).catch(() => {}); if (disabled) { queue = []; pending = null; } try { localStorage.setItem("peer-measurement", enabled ? "yes" : "no"); } catch {} }
 export const learningEnabled = () => !disabled;
 export async function flushLearning(beacon = false) {
-  if (disabled || !token || flushing || (!queue.length && !pending)) return;
+  if (disabled || !token || (flushing && !beacon) || (!queue.length && !pending)) return;
   if (beacon && navigator.sendBeacon) {
     const batches = pending ? [pending] : [];
     while (queue.length && batches.length < 3) batches.push({ batchId: crypto.randomUUID().replaceAll("-", ""), events: queue.splice(0, 30) });
@@ -19,9 +19,10 @@ export async function flushLearning(beacon = false) {
     pending = batches.at(-1) ?? pending; return;
   }
   pending ??= { batchId: crypto.randomUUID().replaceAll("-", ""), events: queue.splice(0, 30) };
+  const sendingId = pending.batchId;
   const payload = JSON.stringify({ token, ...pending });
   flushing = true;
-  try { const r = await fetch("/api/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }); if (r.ok) pending = null; } catch {} finally { flushing = false; }
+  try { const r = await fetch("/api/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }); if (r.ok && pending?.batchId === sendingId) pending = null; } catch {} finally { flushing = false; }
 }
 export async function initLearning(): Promise<{ variant: "a" | "b"; cleanup: () => void }> {
   try { disabled = localStorage.getItem("peer-measurement") === "no"; } catch {}
