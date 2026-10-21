@@ -4,15 +4,17 @@ import { AppError, cleanText, id, overlap, privatePerson, redact, sign, validId,
 import { changeRecord, readRecord, records, writeRecord } from "@/lib/peer-store";
 import { checkOrigin, personFromRequest, setSession } from "@/lib/peer-auth";
 import { proxyReply, reflection } from "@/lib/peer-ai";
+import { connectTelegram, disconnectTelegram, enqueueAlert, telegramAvailable, type TelegramBinding } from "@/lib/peer-telegram";
 import type { CaseCard, Invite, Person, RoomMessage, SharedCase } from "@/lib/peer-types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
 type Member = { id: string; alias: string; at: number; lastSeen: number; generation: number; invited: boolean; rooms: string[] };
-type Directory = { members: Record<string, Member>; cases: SharedCase[]; joins: number; shares: number };
+type Activity = { lastAt: number; lastOwner: string; waiting?: { owner: string; for: string[]; at: number } };
+type Directory = { activity?: Record<string, Activity>; members: Record<string, Member>; cases: SharedCase[]; joins: number; shares: number };
 const directoryPath = (cohort: string) => `cohorts/${cohort}/directory.json`;
-const emptyDirectory = (): Directory => ({ members: {}, cases: [], joins: 0, shares: 0 });
+const emptyDirectory = (): Directory => ({ activity: {}, members: {}, cases: [], joins: 0, shares: 0 });
 const json = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
 
 async function updatePerson(uid: string, mutate: (p: Person) => Person) {
@@ -27,7 +29,8 @@ async function touch(p: Person, force = false) {
 function cards(p: Person, d: Directory): CaseCard[] {
   return d.cases.map(c => {
     const { owner, cohort: _cohort, ...safe } = c;
-    return { ...safe, own: owner === p.id, joined: p.roomIds.includes(c.id), score: overlap([...p.keywords, p.topic], [...c.keywords, c.topic]), online: Date.now() - (d.members[owner]?.lastSeen ?? 0) < 120000, participants: Object.values(d.members).filter(m => m.rooms.includes(c.id)).length };
+    const activity = d.activity?.[c.id];
+    return { ...safe, own: owner === p.id, joined: p.roomIds.includes(c.id), score: overlap([...p.keywords, p.topic], [...c.keywords, c.topic]), online: Date.now() - (d.members[owner]?.lastSeen ?? 0) < 120000, participants: Object.values(d.members).filter(m => m.rooms.includes(c.id)).length, unread: !!activity && activity.lastOwner !== p.id && activity.lastAt > (p.lastRead?.[c.id] ?? p.createdAt), waitingForMe: !!activity?.waiting?.for.includes(p.id), waitingOnPeers: activity?.waiting?.owner === p.id };
   }).sort((a, b) => b.score - a.score || b.at - a.at);
 }
 async function loadState(p: Person, roomId?: string | null) {
@@ -40,7 +43,7 @@ async function loadState(p: Person, roomId?: string | null) {
     if (card) room = { case: card, messages: (await records<RoomMessage>(`rooms/${roomId}/messages/`, 200)).sort((a, b) => a.at - b.at).map(({ owner: _owner, ...m }) => m) };
   }
   const members = Object.values(d.members);
-  return { person: privatePerson(p), cases: allCards, room, stats: { participants: members.length, online: members.filter(x => Date.now() - x.lastSeen < 120000).length, sharedCases: d.cases.length, invitedParticipants: members.filter(x => x.invited).length, secondGeneration: members.filter(x => x.generation >= 2).length } };
+  return { person: privatePerson(p), cases: allCards, room, stats: { participants: members.length, online: members.filter(x => Date.now() - x.lastSeen < 120000).length, sharedCases: d.cases.length, invitedParticipants: members.filter(x => x.invited).length, secondGeneration: members.filter(x => x.generation >= 2).length }, telegram: { available: telegramAvailable(), connected: !!(await readRecord<TelegramBinding>(`telegram/bindings/${p.id}.json`))?.value.enabled } };
 }
 async function bodyOf(request: NextRequest) {
   const raw = await request.text(); if (raw.length > 16000) throw new AppError(413, "Dit bericht is te groot.");
@@ -84,6 +87,8 @@ async function handle(request: NextRequest, action: string) {
     await setSession(v.uid); return json({ ok: true });
   }
   let p = await personFromRequest(request);
+  if (action === "telegram-connect") return json({ url: await connectTelegram(p.id) });
+  if (action === "telegram-disconnect") { await disconnectTelegram(p.id); return json(await loadState(p)); }
   if (action === "state") return json(await loadState(p, request.nextUrl.searchParams.get("room")));
   if (action === "recover") return json({ code: sign({ kind: "recovery", uid: p.id, exp: Date.now() + 90 * 86400000 }) });
   if (action === "chat") {
@@ -103,20 +108,39 @@ async function handle(request: NextRequest, action: string) {
     const text = redact(cleanText(body.text, 1200)); const topic = cleanText(body.topic || p.topic || "Nieuwe vraag", 80);
     if (body.parentId) await roomFor(p, body.parentId);
     const c: SharedCase = { id: id(), owner: p.id, cohort: p.cohort, alias: p.alias, topic, text, keywords: [...new Set((topic + " " + text).toLowerCase().match(/[a-zà-ÿ]{4,}/g) || [])].slice(0, 40), at: Date.now(), ...(body.parentId ? { parentId: body.parentId } : {}) };
-    await changeRecord<Directory>(directoryPath(p.cohort), d => { d ??= emptyDirectory(); if (d.cases.filter(x => x.owner === p.id).length >= 8) throw new AppError(429, "Voor deze proef kun je maximaal acht cases inbrengen."); d.cases.push(c); d.shares++; return d; });
+    await changeRecord<Directory>(directoryPath(p.cohort), d => { d ??= emptyDirectory(); if (d.cases.filter(x => x.owner === p.id).length >= 8) throw new AppError(429, "Voor deze proef kun je maximaal acht cases inbrengen."); d.cases.push(c); d.shares++; d.activity ??= {}; d.activity[c.id] = { lastAt: c.at, lastOwner: p.id, waiting: { owner: p.id, for: [], at: Date.now() } }; return d; });
     p = await updatePerson(p.id, x => ({ ...x, roomIds: [...new Set([...x.roomIds, c.id])] }));
     p = await touch(p, true);
     return json({ ...await loadState(p, c.id), roomId: c.id });
   }
   if (action === "join") {
     const c = await roomFor(p, body.roomId, false);
-    p = await updatePerson(p.id, x => ({ ...x, roomIds: [...new Set([...x.roomIds, c.id])] }));
+    p = await updatePerson(p.id, x => ({ ...x, roomIds: [...new Set([...x.roomIds, c.id])], lastRead: { ...x.lastRead, [c.id]: Date.now() } }));
+    await changeRecord<Directory>(directoryPath(p.cohort), d => { d ??= emptyDirectory(); const wait = d.activity?.[c.id]?.waiting; if (wait && wait.owner !== p.id && !wait.for.includes(p.id)) wait.for.push(p.id); return d; });
     p = await touch(p, true); return json(await loadState(p, c.id));
   }
   if (action === "leave") {
     const c = await roomFor(p, body.roomId);
     p = await updatePerson(p.id, x => ({ ...x, roomIds: x.roomIds.filter(r => r !== c.id) }));
     p = await touch(p, true); return json(await loadState(p));
+  }
+  if (action === "read") {
+    const c = await roomFor(p, body.roomId);
+    p = await updatePerson(p.id, x => ({ ...x, lastRead: { ...x.lastRead, [c.id]: Date.now() } }));
+    return json(await loadState(p, c.id));
+  }
+  if (action === "wait") {
+    const c = await roomFor(p, body.roomId);
+    const eventId = id();
+    const d = await changeRecord<Directory>(directoryPath(p.cohort), d => {
+      d ??= emptyDirectory(); d.activity ??= {};
+      const existing = d.activity[c.id];
+      if (existing?.waiting?.owner === p.id && existing.waiting.at > Date.now() - 600000) throw new AppError(429, "Je verzoek staat al open. Geef de ander even tijd.");
+      d.activity[c.id] = { lastAt: existing?.lastAt ?? c.at, lastOwner: existing?.lastOwner ?? p.id, waiting: { owner: p.id, for: Object.values(d.members).filter(m => m.id !== p.id && m.rooms.includes(c.id)).map(m => m.id), at: Date.now() } };
+      return d;
+    });
+    for (const uid of d.activity?.[c.id]?.waiting?.for ?? []) await enqueueAlert(uid, c.id, eventId);
+    return json(await loadState(p, c.id));
   }
   if (action === "message") {
     const c = await roomFor(p, body.roomId); const text = redact(cleanText(body.text, 2000));
@@ -125,6 +149,14 @@ async function handle(request: NextRequest, action: string) {
     if (messages.filter(m => m.owner === p.id && m.at > Date.now() - 60000).length >= 8) throw new AppError(429, "Even rustig aan: maximaal acht bijdragen per minuut.");
     const messageId = id();
     await writeRecord(`rooms/${c.id}/messages/${String(Date.now()).padStart(14, "0")}-${messageId}.json`, { id: messageId, roomId: c.id, owner: p.id, alias: p.alias, text, at: Date.now() } satisfies RoomMessage);
+    const d = await changeRecord<Directory>(directoryPath(p.cohort), d => {
+      d ??= emptyDirectory(); d.activity ??= {};
+      const existing = d.activity[c.id];
+      d.activity[c.id] = { lastAt: Date.now(), lastOwner: p.id, ...(existing?.waiting?.owner === p.id ? { waiting: existing.waiting } : {}) };
+      return d;
+    });
+    const recipients = Object.values(d.members).filter(m => m.id !== p.id && m.rooms.includes(c.id));
+    for (const member of recipients) await enqueueAlert(member.id, c.id, messageId);
     return json(await loadState(p, c.id));
   }
   if (action === "invite") {

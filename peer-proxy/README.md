@@ -34,3 +34,9 @@ Test privacy met minstens twee afzonderlijke cookiesessies en een apart QA-cohor
 
 ## Nog te valideren
 Werkelijk behouden vervolggebruik, uitnodigingsconversie over meerdere generaties, semantische matching, beoordelingskwaliteit en dagelijkse beheerkosten. Deze proef bewijst geen viraliteit of product-market fit.
+
+## Asynchroon en Telegram
+Een case kan op een reactie wachten; deelnemers kunnen expliciet een reactie vragen. Nieuwe bijdragen lossen een wachtverzoek op. De interface toont ongelezen reacties en aan wie een reactie is gevraagd.
+Telegram heeft één knop in de chat; de eerste keer vereist Telegram zelf nog Start. De bot gebruikt een eenmalige koppelcode van 15 minuten. Geen privégesprek of case-inhoud in meldingen. /stop schakelt meldingen uit.
+Nog eenmalig configureren: TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, TELEGRAM_WEBHOOK_SECRET. Registreer via Telegram setWebhook de productie-URL /api/telegram/webhook met dezelfde secret_token. Deel nooit de bot-token in de broncode of chat. De app toont de koppeling pas beschikbaar met alle drie de instellingen.
+CRON_SECRET beveiligt /api/telegram/retry. De Cron herprobeert een mislukte melding maximaal vier keer, met tussenpozen van minimaal vijf minuten, binnen 24 uur. Een transporttimeout kan bij Telegram tot een dubbele melding leiden; er is geen exactly-once-garantie.
