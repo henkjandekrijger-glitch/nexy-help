@@ -59,3 +59,7 @@ Daily `/api/learn/review` requires the existing `CRON_SECRET`, writes a private 
 
 ## Finding peers beyond the group
 Internal matching uses actual private needs and only approved candidate cases; no fictional people or expertise. Optional external discovery requires a separately approved, AI-filtered search brief. Exa search runs through AI Gateway using the existing Vercel identity. Only source-returned HTTPS URLs and excerpts are shown; they are not confirmed interested participants. A user can create/copy an invitation. No automatic email, social DM or contact enrichment exists in this release, and nothing is sent to third parties automatically. Telegram still requires a one-time bot configuration before real alerts can be delivered.
+
+
+## Nexy clean interface (21 October 2026)
+Brand renamed to Nexy. The interface now follows the restrained Outnamed type, colour, spacing and field styles: one column, direct initial composer, no separate start screen, no dashboard/sidebar/stat tiles. Optional navigation and room management sit behind a single menu. Share approval is the explicit final “Deel deze tekst” action after the signed AI-filtered preview; there is no redundant checkbox. UX version clean-2 starts a fresh experiment on the initial input framing (the person who can help versus the need) to avoid mixing the previous layout with this one. Existing private records and matching/learning functions remain in the same cloud project.

@@ -1,4 +1,4 @@
-export const UX_VERSION = "2026-10-21-clean-1";
+export const UX_VERSION = "2026-10-21-clean-2";
 export const EVENT_NAMES = ["page_view", "cta_click", "view", "click", "focus", "draft", "scroll", "visibility", "page_exit", "api_ok", "api_error", "voice_start", "voice_end", "voice_error", "match_seen", "modal", "invite_copy", "invite_share", "privacy_choice", "helpful", "not_helpful"] as const;
 export type LearnEvent = { name: typeof EVENT_NAMES[number]; at: number; props: Record<string, string | number | boolean> };
 export type Arm = { visits: number; started: number; first_message: number; first_peer_reply: number; returned: number; helpful: number; failed: number };
